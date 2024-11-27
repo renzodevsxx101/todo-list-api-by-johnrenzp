@@ -6,23 +6,43 @@ from .models import Task
 from .serializers import TaskSerializer
 
 class TaskViewSet(ViewSet):
-    # This is a  GET method to retrieve tasks
+    # This is a GET method to retrieve a list of all tasks, categorized into Incoming, Today, and Overdue.
     def list(self, request):
-        tasks = Task.objects.all()
-        
         status_filter = request.query_params.get('status', None)
 
-        # This filters tasks based on status query parameter
-        if status_filter == 'incoming':
-            tasks = tasks.filter(due_date__gt=date.today()) 
-        elif status_filter == 'today':
-            tasks = tasks.filter(due_date=date.today())
-        elif status_filter == 'overdue':
-            tasks = tasks.filter(due_date__lt=date.today())
-            
-        task_data = TaskSerializer(tasks, many=True).data
-        return Response(task_data)
+        if status_filter:
+            if status_filter == 'incoming':
+                tasks = Task.objects.filter(due_date__gt=date.today())
+                data = {"Incoming": [TaskSerializer(task).data for task in tasks]}
+            elif status_filter == 'today':
+                tasks = Task.objects.filter(due_date=date.today())
+                data = {"Today": [TaskSerializer(task).data for task in tasks]}
+            elif status_filter == 'overdue':
+                tasks = Task.objects.filter(due_date__lt=date.today())
+                data = {"Overdue": [TaskSerializer(task).data for task in tasks]}
+            else:
+                return Response({"message": "Invalid status filter."})
 
+            if not tasks.exists():
+                return Response({"message": f"No {status_filter} tasks found."})
+
+        else:
+            tasks = Task.objects.all()
+            data = {"Incoming": [], "Today": [], "Overdue": []}
+            for task in tasks:
+                if task.due_date > date.today():
+                    data["Incoming"].append(TaskSerializer(task).data)
+                elif task.due_date == date.today():
+                    data["Today"].append(TaskSerializer(task).data)
+                else:
+                    data["Overdue"].append(TaskSerializer(task).data)
+
+            if not any(data.values()):
+                return Response({"message": "No tasks found."})
+
+        return Response(data)
+    
+    # This is a  GET method to retrieve details of a specific task based on Id.
     def retrieve(self, request, pk=None):
         try:
             task = Task.objects.get(pk=pk)
